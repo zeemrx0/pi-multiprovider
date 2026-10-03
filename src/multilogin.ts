@@ -4,6 +4,7 @@ import type {
   AuthPrompt,
   AuthType,
   Credential,
+  LoginOptions,
   Provider,
   ProviderAuthInteraction,
 } from '@earendil-works/pi-ai'
@@ -11,6 +12,7 @@ import {
   ExtensionSelectorComponent,
   LoginDialogComponent,
   OAuthSelectorComponent,
+  SettingsManager,
   type ExtensionContext,
 } from '@earendil-works/pi-coding-agent'
 import { Container, type Focusable, type TUI } from '@earendil-works/pi-tui'
@@ -329,6 +331,7 @@ async function promptDialog(
 export async function loginCredential(
   selection: LoginSelection,
   interaction: ProviderAuthInteraction,
+  options?: LoginOptions,
 ): Promise<Credential> {
   const method = selection.authType === 'oauth'
     ? selection.provider.auth.oauth
@@ -336,7 +339,9 @@ export async function loginCredential(
   if (method?.login === undefined) {
     throw new Error(`No ${selection.authType} login method for ${selection.provider.name}`)
   }
-  return method.login(interaction)
+  return selection.authType === 'oauth'
+    ? selection.provider.auth.oauth!.login(interaction, options)
+    : method.login(interaction)
 }
 
 export async function promptApiKeyCredential(
@@ -383,8 +388,11 @@ export async function showLoginDialog(
       notify: event => notifyDialog(host.dialog, event),
     }
 
+    let settingsManager: SettingsManager | undefined
     queueMicrotask(() => {
-      loginCredential(selection, interaction)
+      loginCredential(selection, interaction, {
+        getDeviceId: () => (settingsManager ??= SettingsManager.create(ctx.cwd)).getOrCreateDeviceId(),
+      })
         .then(credential => finish({ credential }))
         .catch(error => {
           const normalized = errorFrom(error)
